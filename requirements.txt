@@ -1,0 +1,10 @@
+numpy
+pandas==1.3.4
+sklearn
+torch
+pytorch-lightning
+h5py
+matplotlib
+ipykernel
+pre-commit
+python-dotenv
