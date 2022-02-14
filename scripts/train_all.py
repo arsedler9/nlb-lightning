@@ -23,6 +23,7 @@ config = dict(
     bin_width=tune.grid_search([20, 5]),
     phase=tune.grid_search(["val", "test"]),
     verbose=False,
+    log_every_n_epochs=20,
 )
 
 tune.run(

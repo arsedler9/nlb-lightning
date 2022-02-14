@@ -31,6 +31,7 @@ def train(
     dropout=0.05,
     seed=0,
     verbose=True,
+    log_every_n_epochs=5,
 ):
     pl.seed_everything(seed)
     # Create the datamodule
@@ -59,9 +60,9 @@ def train(
     if phase == "val":
         callbacks.extend(
             [
-                RasterPlotCallback(log_every_n_epochs=5),
-                TrajectoryPlotCallback(log_every_n_epochs=5),
-                EvaluationCallback(log_every_n_epochs=5),
+                RasterPlotCallback(log_every_n_epochs=log_every_n_epochs),
+                TrajectoryPlotCallback(log_every_n_epochs=log_every_n_epochs),
+                EvaluationCallback(log_every_n_epochs=log_every_n_epochs),
             ]
         )
     # Create the trainer
