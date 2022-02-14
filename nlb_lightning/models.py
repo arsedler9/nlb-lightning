@@ -85,14 +85,24 @@ class SequentialAutoencoder(pl.LightningModule):
 
     def validation_step(self, batch, batch_ix):
 
-        heldin, heldin_forward, heldout, heldout_forward, behavior = batch
-        # Pass data through the model
-        fwd_steps = heldin_forward.shape[1]
-        preds, latents = self.forward(heldin, fwd_steps)
-        # Assemble the data
-        heldin_full = torch.cat([heldin, heldin_forward], dim=1)
-        heldout_full = torch.cat([heldout, heldout_forward], dim=1)
-        data = torch.cat([heldin_full, heldout_full], dim=2)
+        # On test-phase data, compute loss only across heldin neurons
+        if len(batch) == 1:
+            (heldin,) = batch
+            # Pass data through the model
+            preds, latents = self.forward(heldin, 0)
+            # Isolate heldin predictions
+            n_heldin = heldin.shape[2]
+            preds = preds[..., :n_heldin]
+            data = heldin
+        else:
+            heldin, heldin_forward, heldout, heldout_forward, behavior = batch
+            # Pass data through the model
+            fwd_steps = heldin_forward.shape[1]
+            preds, latents = self.forward(heldin, fwd_steps)
+            # Assemble the data
+            heldin_full = torch.cat([heldin, heldin_forward], dim=1)
+            heldout_full = torch.cat([heldout, heldout_forward], dim=1)
+            data = torch.cat([heldin_full, heldout_full], dim=2)
         # Compute the Poisson log-likelihood
         loss = nn.functional.poisson_nll_loss(preds, data)
         self.log("valid/loss", loss)

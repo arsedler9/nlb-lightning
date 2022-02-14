@@ -49,13 +49,15 @@ class NLBDataModule(pl.LightningDataModule):
                 to_tensor(h5file["train_behavior"][()]),
             )
         self.train_ds = TensorDataset(*self.train_data)
-        # Check if evaluation data is available
+        # Load the evaluation input from file
         eval_data_path = os.path.join(self.save_path, EVAL_INPUT_FILE)
+        with h5py.File(eval_data_path, "r") as h5file:
+            heldin = to_tensor(h5file["eval_spikes_heldin"][()])
+            self.valid_data = (heldin,)
+        # Check if evaluation target data is available
         target_data_path = os.path.join(self.save_path, EVAL_TARGET_FILE)
         if os.path.isfile(target_data_path):
             # Load the validation data arrays from file
-            with h5py.File(eval_data_path, "r") as h5file:
-                heldin = to_tensor(h5file["eval_spikes_heldin"][()])
             with h5py.File(target_data_path, "r") as h5file:
                 # Match nlb_tools unique naming for non-5ms bin widths
                 groupname = self.hparams.dataset_name
@@ -64,7 +66,7 @@ class NLBDataModule(pl.LightningDataModule):
                 h5group = h5file[groupname]
                 # Store the dataset
                 self.valid_data = (
-                    heldin,
+                    *self.valid_data,
                     to_tensor(h5group["eval_spikes_heldin_forward"][()]),
                     to_tensor(h5group["eval_spikes_heldout"][()]),
                     to_tensor(h5group["eval_spikes_heldout_forward"][()]),
@@ -88,7 +90,7 @@ class NLBDataModule(pl.LightningDataModule):
                         (heldin_train.shape[0], 1), dtype=bool
                     )
                     self.eval_decode_mask = np.ones((heldin.shape[0], 1), dtype=bool)
-            self.valid_ds = TensorDataset(*self.valid_data)
+        self.valid_ds = TensorDataset(*self.valid_data)
 
     def train_dataloader(self, shuffle=True):
         train_dl = DataLoader(
@@ -100,8 +102,6 @@ class NLBDataModule(pl.LightningDataModule):
         return train_dl
 
     def val_dataloader(self):
-        if not hasattr(self, "valid_ds"):
-            return None
         valid_dl = DataLoader(
             self.valid_ds,
             batch_size=self.hparams.batch_size,
