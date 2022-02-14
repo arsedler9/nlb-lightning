@@ -9,5 +9,5 @@ cd nlb-lightning
 conda create --name nlb-lightning python=3.9
 conda activate nlb-lightning
 pip install -e nlb_tools
-pip install -e nlb-lightning
+pip install -e .
 ```

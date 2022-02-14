@@ -5,8 +5,6 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 from sklearn.decomposition import PCA
-from sklearn.linear_model import Ridge
-from sklearn.model_selection import GridSearchCV
 
 from nlb_tools.evaluation import (
     bits_per_spike,
@@ -14,6 +12,7 @@ from nlb_tools.evaluation import (
     speed_tp_correlation,
     velocity_decoding,
 )
+
 
 def fig_to_rgb_array(fig):
     """Converts a matplotlib figure into an RGB array for logging.

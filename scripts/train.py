@@ -4,13 +4,13 @@ import dotenv
 import pytorch_lightning as pl
 import torch
 
-from ptl_tutorial.callbacks import (
+from nlb_lightning.callbacks import (
     EvaluationCallback,
     RasterPlotCallback,
     TrajectoryPlotCallback,
 )
-from ptl_tutorial.datamodules import NLBDataModule
-from ptl_tutorial.models import SequentialAutoencoder
+from nlb_lightning.datamodules import NLBDataModule
+from nlb_lightning.models import SequentialAutoencoder
 
 # Load the NLB environment variables
 dotenv.load_dotenv(override=True)

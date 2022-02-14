@@ -1,8 +1,8 @@
 import os
 
-import numpy as np
 import dotenv
 import h5py
+import numpy as np
 import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader, TensorDataset
@@ -84,7 +84,9 @@ class NLBDataModule(pl.LightningDataModule):
                     self.train_decode_mask = h5group["train_decode_mask"][()]
                     self.eval_decode_mask = h5group["eval_decode_mask"][()]
                 else:
-                    self.train_decode_mask = np.ones((heldin_train.shape[0], 1), dtype=bool)
+                    self.train_decode_mask = np.ones(
+                        (heldin_train.shape[0], 1), dtype=bool
+                    )
                     self.eval_decode_mask = np.ones((heldin.shape[0], 1), dtype=bool)
             self.valid_ds = TensorDataset(*self.valid_data)
 
