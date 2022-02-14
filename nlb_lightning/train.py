@@ -21,8 +21,8 @@ RUNS_HOME = os.environ["RUNS_HOME"]
 
 def train(
     run_tag="test_run",
-    dataset_name="area2_bump",
-    phase="test",
+    dataset_name="mc_maze_large",
+    phase="val",
     bin_width=20,
     batch_size=256,
     hidden_size=100,
@@ -30,6 +30,7 @@ def train(
     weight_decay=1e-4,
     dropout=0.05,
     seed=0,
+    verbose=True,
 ):
     pl.seed_everything(seed)
     # Create the datamodule
@@ -64,17 +65,22 @@ def train(
             ]
         )
     # Create the trainer
+    runtag_dir = os.path.join(RUNS_HOME, run_tag)
+    data_tag = os.path.basename(datamodule.save_path)
     trainer = pl.Trainer(
-        default_root_dir=os.path.join(RUNS_HOME, run_tag),
-        max_epochs=10,
+        default_root_dir=os.path.join(runtag_dir, data_tag),
+        max_epochs=10_000,
         callbacks=callbacks,
         gpus=int(torch.cuda.is_available()),
         log_every_n_steps=1,
+        enable_progress_bar=verbose,
+        enable_model_summary=verbose,
     )
     # Train the model
     trainer.fit(model=model, datamodule=datamodule)
     # Save model outputs for submission
-    make_submission(model, trainer)
+    save_path = os.path.join(runtag_dir, f"submission-{phase}.h5")
+    make_submission(model, trainer, save_path)
 
 
 if __name__ == "__main__":

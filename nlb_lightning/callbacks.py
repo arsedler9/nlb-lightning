@@ -13,6 +13,8 @@ from nlb_tools.evaluation import (
     velocity_decoding,
 )
 
+plt.switch_backend("Agg")
+
 
 def fig_to_rgb_array(fig):
     """Converts a matplotlib figure into an RGB array for logging.

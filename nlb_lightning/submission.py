@@ -1,11 +1,11 @@
-import os
+import time
 
 import torch
 
 from nlb_tools.make_tensors import save_to_h5
 
 
-def make_submission(model, trainer):
+def make_submission(model, trainer, save_path):
     # Infer data shapes
     _, n_fwd, n_heldin = trainer.datamodule.train_data[1].shape
     # Batch the data
@@ -38,7 +38,11 @@ def make_submission(model, trainer):
             "eval_rates_heldout_forward": eval_rates[:, -n_fwd:, n_heldin:],
         }
     }
-    # Save the model output to the model directory
-    model_dir = os.path.dirname(os.path.dirname(best_model_path))
-    save_path = os.path.join(model_dir, "submission.h5")
-    save_to_h5(output_dict, save_path)
+    # Save the model output to the model directory when output file becomes available
+    write_successful = False
+    while not write_successful:
+        try:
+            save_to_h5(output_dict, save_path)
+            write_successful = True
+        except OSError:
+            time.sleep(2)
