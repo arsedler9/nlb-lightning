@@ -16,6 +16,19 @@ EVAL_TARGET_FILE = os.environ["EVAL_TARGET_FILE"]
 
 
 def to_tensor(array):
+    """Converts a loaded numpy array to a tensor
+    and ensures correct dtype
+
+    Parameters
+    ----------
+    array : np.array
+        The numpy array to convert.
+
+    Returns
+    -------
+    torch.Tensor
+        The converted tensor.
+    """
     return torch.tensor(array, dtype=torch.float)
 
 
