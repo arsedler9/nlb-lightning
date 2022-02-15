@@ -4,6 +4,17 @@ from torch import nn
 
 
 class SequentialAutoencoder(pl.LightningModule):
+    """A simple sequential autoencoder that demonstrates
+    a model compatible with the `nlb_lightning` API. The
+    recognition model is a bidirectional GRU that reads
+    over the heldin data, followed by a linear layer that
+    maps the last hidden states to an initial condition for
+    a decoding GRU. The decoding GRU unrolls without inputs,
+    and its states are linearly mapped to logrates. The
+    model is trained using Poisson NLL of all observed,
+    forward, heldin, and heldout data.
+    """
+
     def __init__(
         self,
         input_size: int,
@@ -13,6 +24,28 @@ class SequentialAutoencoder(pl.LightningModule):
         weight_decay: float,
         dropout=0.1,
     ):
+        """Initializes the model.
+
+        Parameters
+        ----------
+        input_size : int
+            The dimensionality of the input sequence (i.e.
+            number of heldin neurons)
+        hidden_size : int
+            The hidden dimensionality of the network, which
+            determines the dimensionality of both the encoders
+            and decoders
+        output_size : int
+            The dimensionality of the output sequence (i.e.
+            total number of heldin and heldout neurons)
+        learning_rate : float
+            The learning rate to use for optimization
+        weight_decay : float
+            The weight decay to regularize optimization
+        dropout : float, optional
+            The ratio of neurons to drop in dropout layers,
+            by default 0.1
+        """
         super().__init__()
         self.save_hyperparameters()
         # Instantiate bidirectional GRU encoder
@@ -39,7 +72,22 @@ class SequentialAutoencoder(pl.LightningModule):
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, observ, fwd_steps):
+        """The forward pass of the model.
 
+        Parameters
+        ----------
+        observ : torch.Tensor
+            A BxTxN tensor of heldin neurons at observed
+            time points.
+        fwd_steps : int
+            The number of steps to unroll beyond T
+
+        Returns
+        -------
+        torch.Tensor
+            A Bx(T+fwd_steps)x(N+n_heldout) tensor of
+            estimated firing rates
+        """
         batch_size, obs_steps, _ = observ.shape
         # Pass data through the model
         _, h_n = self.encoder(observ)
@@ -60,6 +108,13 @@ class SequentialAutoencoder(pl.LightningModule):
         return logrates, latents
 
     def configure_optimizers(self):
+        """Sets up the optimizer.
+
+        Returns
+        -------
+        torch.optim.Adam
+            A configured optimizer
+        """
         optimizer = torch.optim.Adam(
             self.parameters(),
             lr=self.hparams.learning_rate,
@@ -68,6 +123,22 @@ class SequentialAutoencoder(pl.LightningModule):
         return optimizer
 
     def training_step(self, batch, batch_ix):
+        """Computes, logs, and returns the loss.
+
+        Parameters
+        ----------
+        batch : tuple of torch.Tensor
+            A batch of data from the datamodule - contains
+            heldin, heldin_forward, heldout, heldout_forward,
+            and behavior tensors.
+        batch_ix : int
+            Ignored
+
+        Returns
+        -------
+        torch.Tensor
+            The scalar loss
+        """
 
         heldin, heldin_forward, heldout, heldout_forward, behavior = batch
         # Pass data through the model
@@ -84,6 +155,24 @@ class SequentialAutoencoder(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_ix):
+        """Computes, logs, and returns the loss.
+
+        Parameters
+        ----------
+        batch : tuple of torch.Tensor
+            A batch of data from the datamodule. During the
+            "val" phase, contains heldin, heldin_forward,
+            heldout, heldout_forward, and behavior tensors.
+            During the "test" phase, contains only the heldin
+            tensor.
+        batch_ix : int
+            Ignored
+
+        Returns
+        -------
+        torch.Tensor
+            The scalar loss
+        """
 
         # On test-phase data, compute loss only across heldin neurons
         if len(batch) == 1:
