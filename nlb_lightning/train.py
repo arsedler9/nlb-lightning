@@ -33,6 +33,49 @@ def train(
     verbose=True,
     log_every_n_epochs=5,
 ):
+    """An example training function for the sequential
+    autoencoder that works across all datasets, phases,
+    and bin widths. At the end of training, writes
+    predictions to HDF5 file for submission. Can be run
+    individually or in parallel across datasets.
+
+    Parameters
+    ----------
+    run_tag : str, optional
+        The tag that identifies a given experiment,
+        by default "test_run"
+    dataset_name : str, optional
+        One of the data tags specified by the NLB organizers,
+        by default "mc_maze_large"
+    phase : str, optional
+        The phase of the competition - either "val" or "test",
+        by default "val"
+    bin_width : int, optional
+        The width of data bins, by default 20
+    batch_size : int, optional
+        The number of samples to process in each batch,
+        by default 256
+    hidden_size : int, optional
+        The hidden dimensionality of the network, which
+        determines the dimensionality of both the encoders
+        and decoders, by default 100
+    learning_rate : _type_, optional
+        The learning rate to use for optimization,
+        by default 1e-3
+    weight_decay : _type_, optional
+         The weight decay to regularize optimization,
+         by default 1e-4
+    dropout : float, optional
+        The ratio of neurons to drop in dropout layers,
+        by default 0.05
+    seed : int, optional
+        The random seed for model initialization and training,
+        by default 0
+    verbose : bool, optional
+        Whether to allow verbose trainer output, by default True
+    log_every_n_epochs : int, optional
+        Frequency of logging by callbacks, by default 5
+    """
     pl.seed_everything(seed)
     # Create the datamodule
     datamodule = NLBDataModule(

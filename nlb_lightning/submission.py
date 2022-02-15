@@ -6,6 +6,19 @@ from nlb_tools.make_tensors import save_to_h5
 
 
 def make_submission(model, trainer, save_path):
+    """Computes predictions for a given model and stores
+    them in the EvalAI submission format for NLB.
+
+    Parameters
+    ----------
+    model : pytorch_lightning.LightningModule
+        A trained model that estimates firing rates.
+    trainer : pytorch_lightning.Trainer
+        The trainer corresponding to the trained model.
+    save_path : str
+        The destination file for estimated rates.
+
+    """
     # Infer data shapes
     _, n_fwd, n_heldin = trainer.datamodule.train_data[1].shape
     # Batch the data
@@ -38,7 +51,7 @@ def make_submission(model, trainer, save_path):
             "eval_rates_heldout_forward": eval_rates[:, -n_fwd:, n_heldin:],
         }
     }
-    # Save the model output to the model directory when output file becomes available
+    # Save rates when the file becomes available (for parallel run compatibility)
     write_successful = False
     while not write_successful:
         try:
