@@ -35,6 +35,21 @@ def main(
     phase="val",
     bin_width=5,
 ):
+    """Loads NLB datasets downloaded from DANDI and stored
+    at `DATA_HOME`, preprocesses the dataset using `nlb_tools`,
+    and stores output at `PREP_HOME`.
+
+    Parameters
+    ----------
+    dataset_name : str, optional
+        One of the data tags specified by the NLB organizers,
+        by default "mc_maze_large"
+    phase : str, optional
+        The phase of the competition - either "val" or "test",
+        by default "val"
+    bin_width : int, optional
+        The width of data bins, by default 5
+    """
     assert phase in ["val", "test"]
     # Get paths from constants and make sure they exist
     data_path = os.path.join(DATA_HOME, DANDI_SUBPATH[dataset_name])
