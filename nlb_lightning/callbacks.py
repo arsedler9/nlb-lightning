@@ -151,12 +151,12 @@ class EvaluationCallback(pl.Callback):
         _, n_obs, n_heldin = heldin.shape
         preds_heldout = preds[:, :n_obs, n_heldin:]
         co_bps = bits_per_spike(preds_heldout, heldout)
-        pl_module.log("nlb/co_bps", co_bps)
+        pl_module.log("nlb/co_bps", max(co_bps, -10.0))
         # Compute forward prediction bits per spike
         preds_forward = preds[:, n_obs:]
         forward = torch.cat([heldin_forward, heldout_forward], dim=2)
         fp_bps = bits_per_spike(preds_forward, forward.detach().cpu().numpy())
-        pl_module.log("nlb/fp_bps", fp_bps)
+        pl_module.log("nlb/fp_bps", max(fp_bps, -10.0))
         # Get relevant training dataset from datamodule
         *_, train_behavior = trainer.datamodule.train_data
         train_behavior = train_behavior.detach().cpu().numpy()
