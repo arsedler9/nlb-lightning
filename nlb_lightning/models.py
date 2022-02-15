@@ -22,7 +22,7 @@ class SequentialAutoencoder(pl.LightningModule):
         output_size: int,
         learning_rate: float,
         weight_decay: float,
-        dropout=0.1,
+        dropout: float,
     ):
         """Initializes the model.
 
@@ -42,9 +42,8 @@ class SequentialAutoencoder(pl.LightningModule):
             The learning rate to use for optimization
         weight_decay : float
             The weight decay to regularize optimization
-        dropout : float, optional
-            The ratio of neurons to drop in dropout layers,
-            by default 0.1
+        dropout : float
+            The ratio of neurons to drop in dropout layers
         """
         super().__init__()
         self.save_hyperparameters()
@@ -87,6 +86,9 @@ class SequentialAutoencoder(pl.LightningModule):
         torch.Tensor
             A Bx(T+fwd_steps)x(N+n_heldout) tensor of
             estimated firing rates
+        torch.Tensor
+            A Bx(T+fwd_steps)x(hidden_dim) tensor of
+            latent states
         """
         batch_size, obs_steps, _ = observ.shape
         # Pass data through the model

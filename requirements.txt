@@ -8,3 +8,4 @@ matplotlib
 ipykernel
 pre-commit
 python-dotenv
+ray[tune]

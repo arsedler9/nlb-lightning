@@ -1,12 +1,13 @@
 from ray import tune
+from train_sae import train
 
-from nlb_lightning.train import train
 
-
+# Wrap `train` in a function that unpacks `config`
 def tune_train(config):
     return train(**config)
 
 
+# Define the hyperparameters to pass into `train`
 config = dict(
     run_tag="baseline",
     dataset_name=tune.grid_search(
@@ -25,7 +26,7 @@ config = dict(
     verbose=False,
     log_every_n_epochs=20,
 )
-
+# Start all training runs in parallel
 tune.run(
     tune_train,
     config=config,
