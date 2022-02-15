@@ -20,6 +20,12 @@ def to_tensor(array):
 
 
 class NLBDataModule(pl.LightningDataModule):
+    """Loads from preprocessed HDF5 files created using
+    functions in `nlb_tools.make_tensors` and builds PyTorch
+    `TensorDataset`s and `DataLoader`s that handle batching
+    and shuffling.
+    """
+
     def __init__(
         self,
         dataset_name="mc_maze_large",
@@ -28,6 +34,25 @@ class NLBDataModule(pl.LightningDataModule):
         batch_size=64,
         num_workers=4,
     ):
+        """Initializes the datamodule.
+
+        Parameters
+        ----------
+        dataset_name : str, optional
+            One of the data tags specified by the NLB organizers,
+            by default "mc_maze_large"
+        phase : str, optional
+            The phase of the competition - either "val" or "test",
+            by default "val"
+        bin_width : int, optional
+            The width of data bins, by default 5
+        batch_size : int, optional
+            The number of samples to process in each batch,
+            by default 64
+        num_workers : int, optional
+            The number of subprocesses to use for data loading,
+            by default 4
+        """
         super().__init__()
         self.save_hyperparameters()
         # Get the save path to the data
@@ -36,6 +61,13 @@ class NLBDataModule(pl.LightningDataModule):
         )
 
     def setup(self, stage=None):
+        """Loads the data from preprocessed HDF5 files.
+
+        Parameters
+        ----------
+        stage : str, optional
+            Ignored, by default None
+        """
         # Load the training data arrays from file
         train_data_path = os.path.join(self.save_path, TRAIN_INPUT_FILE)
         with h5py.File(train_data_path, "r") as h5file:
@@ -93,6 +125,18 @@ class NLBDataModule(pl.LightningDataModule):
         self.valid_ds = TensorDataset(*self.valid_data)
 
     def train_dataloader(self, shuffle=True):
+        """Returns a dataloader for the training data.
+
+        Parameters
+        ----------
+        shuffle : bool, optional
+            Whether to shuffle the data, by default True
+
+        Returns
+        -------
+        torch.utils.data.DataLoader
+            A dataloader that generates data during training.
+        """
         train_dl = DataLoader(
             self.train_ds,
             batch_size=self.hparams.batch_size,
@@ -102,6 +146,13 @@ class NLBDataModule(pl.LightningDataModule):
         return train_dl
 
     def val_dataloader(self):
+        """Returns a dataloader for the validation data.
+
+        Returns
+        -------
+        torch.utils.data.DataLoader
+            A dataloader that generates data during validation.
+        """
         valid_dl = DataLoader(
             self.valid_ds,
             batch_size=self.hparams.batch_size,
