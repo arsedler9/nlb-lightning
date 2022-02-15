@@ -17,10 +17,18 @@ plt.switch_backend("Agg")
 
 
 def fig_to_rgb_array(fig):
-    """Converts a matplotlib figure into an RGB array for logging.
+    """Converts a matplotlib figure into an array
+    that can be logged to tensorboard.
 
-    Args:
-        fig ([type]): [description]
+    Parameters
+    ----------
+    fig : matplotlib.figure.Figure
+        The figure to be converted.
+
+    Returns
+    -------
+    np.array
+        The figure as an HxWxC array of pixel values.
     """
     # Convert the figure to a numpy array
     with io.BytesIO() as buff:
@@ -34,11 +42,35 @@ def fig_to_rgb_array(fig):
 
 
 class RasterPlotCallback(pl.Callback):
+    """Plots validation spiking data side-by-side with
+    inferred rates and logs to tensorboard. Heldin/heldout
+    and observed/forward distinctions are indicated by
+    dividing lines.
+    """
+
     def __init__(self, n_samples=2, log_every_n_epochs=20):
+        """Initializes the callback.
+
+        Parameters
+        ----------
+        n_samples : int, optional
+            The number of samples to plot, by default 2
+        log_every_n_epochs : int, optional
+            The frequency with which to plot and log, by default 20
+        """
         self.n_samples = n_samples
         self.log_every_n_epochs = log_every_n_epochs
 
     def on_validation_epoch_end(self, trainer, pl_module):
+        """Logs plots at the end of the validation epoch.
+
+        Parameters
+        ----------
+        trainer : pytorch_lightning.Trainer
+            The trainer currently handling the model.
+        pl_module : pytorch_lightning.LightningModule
+            The model currently being trained.
+        """
         if (trainer.current_epoch % self.log_every_n_epochs) != 0:
             return
         # Get data samples
@@ -77,10 +109,30 @@ class RasterPlotCallback(pl.Callback):
 
 
 class TrajectoryPlotCallback(pl.Callback):
+    """Plots the top-3 PC's of the latent trajectory for
+    all samples in the validation set and logs to tensorboard.
+    """
+
     def __init__(self, log_every_n_epochs=100):
+        """Initializes the callback.
+
+        Parameters
+        ----------
+        log_every_n_epochs : int, optional
+            The frequency with which to plot and log, by default 100
+        """
         self.log_every_n_epochs = log_every_n_epochs
 
     def on_validation_epoch_end(self, trainer, pl_module):
+        """Logs plots at the end of the validation epoch.
+
+        Parameters
+        ----------
+        trainer : pytorch_lightning.Trainer
+            The trainer currently handling the model.
+        pl_module : pytorch_lightning.LightningModule
+            The model currently being trained.
+        """
         # Skip evaluation for most epochs to save time
         if (trainer.current_epoch % self.log_every_n_epochs) != 0:
             return
@@ -120,11 +172,35 @@ class TrajectoryPlotCallback(pl.Callback):
 
 
 class EvaluationCallback(pl.Callback):
+    """Computes and logs all evaluation metrics for the Neural Latents
+    Benchmark to tensorboard. These include `co_bps`, `fp_bps`,
+    `behavior_r2`, `psth_r2`, and `tp_corr`.
+    """
+
     def __init__(self, log_every_n_epochs=20, decoding_cv_sweep=False):
+        """Initializes the callback.
+
+        Parameters
+        ----------
+        log_every_n_epochs : int, optional
+            The frequency with which to plot and log, by default 100
+        decoding_cv_sweep : bool, optional
+            Whether to run a cross-validated hyperparameter sweep to
+            find optimal regularization values, by default False
+        """
         self.log_every_n_epochs = log_every_n_epochs
         self.decoding_cv_sweep = decoding_cv_sweep
 
     def on_validation_epoch_end(self, trainer, pl_module):
+        """Logs plots at the end of the validation epoch.
+
+        Parameters
+        ----------
+        trainer : pytorch_lightning.Trainer
+            The trainer currently handling the model.
+        pl_module : pytorch_lightning.LightningModule
+            The model currently being trained.
+        """
         # Skip evaluation for most epochs to save time
         if (trainer.current_epoch % self.log_every_n_epochs) != 0:
             return
