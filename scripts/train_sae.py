@@ -113,7 +113,7 @@ def train(
     data_tag = os.path.basename(datamodule.save_path)
     trainer = pl.Trainer(
         default_root_dir=os.path.join(runtag_dir, data_tag),
-        max_epochs=10_000,
+        max_epochs=2_000,
         callbacks=callbacks,
         gpus=int(torch.cuda.is_available()),
         log_every_n_steps=1,
