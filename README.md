@@ -1,5 +1,11 @@
-# nlb-lightning
-PyTorch Lightning utilities that make it easier to train and evaluate deep models for the Neural Latents Benchmark.
+# PyTorch Lightning - Neural Latents Benchmark
+PyTorch Lightning utilities that make it easier to train and evaluate deep models for the Neural Latents Benchmark. Key components include a preprocessing script, `DataModule`, example `LightningModule`, logging callbacks, and training scripts. The provided callbacks report competition evaluation metrics, inferred firing rate rasters, and latent state trajectories.
+
+<p float="middle">
+  <img src="assets/evaluation_callback.png" width="32%" />
+  <img src="assets/raster_plot_callback.png" width="32%" />
+  <img src="assets/trajectory_plot_callback.png" width="32%" />
+</p>
 
 # Installation
 Clone the entire `nlb-lightning` repo, including submodules. Then, create and activate a `conda` environment and install the `nlb_tools` and `nlb_lightning` packages.
