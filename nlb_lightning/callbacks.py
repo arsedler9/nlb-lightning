@@ -41,6 +41,13 @@ def fig_to_rgb_array(fig):
     return im
 
 
+def model_fwd(model, batch):
+    input_data, recon_data, *other_input, behavior = batch
+    input_data = input_data.to(model.device)
+    other_input = [oi.to(model.device) for oi in other_input]
+    return model.forward(input_data, *other_input)
+
+
 class RasterPlotCallback(pl.Callback):
     """Plots validation spiking data side-by-side with
     inferred rates and logs to tensorboard. Heldin/heldout
@@ -76,30 +83,26 @@ class RasterPlotCallback(pl.Callback):
         # Get data samples
         dataloader = trainer.datamodule.val_dataloader()
         batch = next(iter(dataloader))
-        heldin, heldin_forward, heldout, heldout_forward, behavior = batch
+        input_data, recon_data, *_ = batch
         # Compute data sizes
-        fwd_steps = heldin_forward.shape[1]
-        batch_size, n_obs, n_heldin = heldin.shape
+        _, steps_tot, neur_tot = recon_data.shape
+        batch_size, steps_obs, neur_in = input_data.shape
         # Compute model output
-        batch_out = pl_module.forward(heldin.to(pl_module.device), fwd_steps)
-        preds, _ = batch_out
-        # Combine input data for raster and convert to numpy arrays
-        heldin_full = torch.cat([heldin, heldin_forward], dim=1)
-        heldout_full = torch.cat([heldout, heldout_forward], dim=1)
-        data = torch.cat([heldin_full, heldout_full], dim=2).detach().cpu().numpy()
-        _, total_steps, total_neurons = data.shape
-        preds = np.exp(preds.detach().cpu().numpy())
+        rates, *_ = model_fwd(pl_module, batch)
+        # Convert data to numpy arrays
+        recon_data = recon_data.detach().cpu().numpy()
+        rates = rates.detach().cpu().numpy()
         # Create subplots
         fig, axes = plt.subplots(
             self.n_samples, 2, sharex=True, sharey=True, figsize=(10, 10)
         )
         for i, ax_row in enumerate(axes):
-            for ax, array in zip(ax_row, [data, preds]):
+            for ax, array in zip(ax_row, [recon_data, rates]):
                 ax.imshow(array[i].T)
-                ax.vlines(n_obs, 0, total_neurons, color="coral")
-                ax.hlines(n_heldin, 0, total_steps, color="coral")
-                ax.set_xlim(0, total_steps)
-                ax.set_ylim(0, total_neurons)
+                ax.vlines(steps_obs, 0, neur_tot, color="coral")
+                ax.hlines(neur_in, 0, steps_tot, color="coral")
+                ax.set_xlim(0, steps_tot)
+                ax.set_ylim(0, neur_tot)
         plt.tight_layout()
         # Log the plot to tensorboard
         im = fig_to_rgb_array(fig)
@@ -136,15 +139,12 @@ class TrajectoryPlotCallback(pl.Callback):
         # Skip evaluation for most epochs to save time
         if (trainer.current_epoch % self.log_every_n_epochs) != 0:
             return
-        # Get model predictions for the entire validation dataset
+        # Get the validation dataset
         val_dataloader = trainer.datamodule.val_dataloader()
-        n_fwd = trainer.datamodule.valid_data[1].shape[1]
-
-        def model_fwd(x):
-            return pl_module.forward(x.to(pl_module.device), n_fwd)
-
-        latents = torch.cat([model_fwd(batch[0])[1] for batch in val_dataloader])
-        latents = latents.detach().cpu().numpy()
+        input_data, recon_data, *_ = trainer.datamodule.valid_data
+        # Pass data through the model
+        latents = [model_fwd(pl_module, batch)[1] for batch in val_dataloader]
+        latents = torch.cat(latents).detach().cpu().numpy()
         # Reduce dimensionality if necessary
         n_samp, n_step, n_lats = latents.shape
         if n_lats > 3:
@@ -160,8 +160,8 @@ class TrajectoryPlotCallback(pl.Callback):
         ax = fig.add_subplot(111, projection="3d")
         for traj in latents:
             ax.plot(*traj.T, alpha=0.2, linewidth=0.5)
-            ax.scatter(*traj[0], alpha=0.1, s=10, c="g")
-            ax.scatter(*traj[-1], alpha=0.1, s=10, c="r")
+        ax.scatter(*latents[:, 0, :].T, alpha=0.1, s=10, c="g")
+        ax.scatter(*latents[:, -1, :].T, alpha=0.1, s=10, c="r")
         ax.set_title(f"explained variance: {explained_variance:.2f}")
         plt.tight_layout()
         # Log the plot to tensorboard
@@ -205,54 +205,45 @@ class EvaluationCallback(pl.Callback):
         if (trainer.current_epoch % self.log_every_n_epochs) != 0:
             return
         # Get entire validation dataset from dataloader
-        (
-            heldin,
-            heldin_forward,
-            heldout,
-            heldout_forward,
-            behavior,
-        ) = trainer.datamodule.valid_data
-        heldout = heldout.detach().cpu().numpy()
+        input_data, recon_data, behavior = trainer.datamodule.valid_data
+        recon_data = recon_data.detach().cpu().numpy()
         behavior = behavior.detach().cpu().numpy()
         # Get model predictions for the entire validation dataset
         val_dataloader = trainer.datamodule.val_dataloader()
-        n_fwd = heldin_forward.shape[1]
-
-        def model_fwd(x):
-            return pl_module.forward(x.to(pl_module.device), n_fwd)
-
-        preds = torch.cat([model_fwd(batch[0])[0] for batch in val_dataloader])
-        preds = torch.exp(preds).detach().cpu().numpy()
+        # Pass the data through the model
+        rates = [model_fwd(pl_module, batch)[0] for batch in val_dataloader]
+        rates = torch.cat(rates).detach().cpu().numpy()
         # Compute co-smoothing bits per spike
-        _, n_obs, n_heldin = heldin.shape
-        preds_heldout = preds[:, :n_obs, n_heldin:]
-        co_bps = bits_per_spike(preds_heldout, heldout)
+        _, n_obs, n_heldin = input_data.shape
+        heldout = recon_data[:, :n_obs, n_heldin:]
+        rates_heldout = rates[:, :n_obs, n_heldin:]
+        co_bps = bits_per_spike(rates_heldout, heldout)
         pl_module.log("nlb/co_bps", max(co_bps, -10.0))
         # Compute forward prediction bits per spike
-        preds_forward = preds[:, n_obs:]
-        forward = torch.cat([heldin_forward, heldout_forward], dim=2)
-        fp_bps = bits_per_spike(preds_forward, forward.detach().cpu().numpy())
+        forward = recon_data[:, n_obs:]
+        rates_forward = rates[:, n_obs:]
+        fp_bps = bits_per_spike(rates_forward, forward)
         pl_module.log("nlb/fp_bps", max(fp_bps, -10.0))
         # Get relevant training dataset from datamodule
         *_, train_behavior = trainer.datamodule.train_data
         train_behavior = train_behavior.detach().cpu().numpy()
         # Get model predictions for the training dataset
         train_dataloader = trainer.datamodule.train_dataloader(shuffle=False)
-        train_preds = torch.cat([model_fwd(batch[0])[0] for batch in train_dataloader])
-        train_preds = torch.exp(train_preds).detach().cpu().numpy()
+        train_rates = [model_fwd(pl_module, batch)[0] for batch in train_dataloader]
+        train_rates = torch.cat(train_rates).detach().cpu().numpy()
         # Get firing rates for observed time points
-        preds_obs = preds[:, :n_obs]
-        train_preds_obs = train_preds[:, :n_obs]
+        rates_obs = rates[:, :n_obs]
+        train_rates_obs = train_rates[:, :n_obs]
         # Compute behavioral decoding performance
         if "dmfc_rsg" in trainer.datamodule.hparams.dataset_name:
-            tp_corr = speed_tp_correlation(heldout, preds_obs, behavior)
+            tp_corr = speed_tp_correlation(heldout, rates_obs, behavior)
             pl_module.log("nlb/tp_corr", tp_corr)
         else:
             behavior_r2 = velocity_decoding(
-                train_preds_obs,
+                train_rates_obs,
                 train_behavior,
                 trainer.datamodule.train_decode_mask,
-                preds_obs,
+                rates_obs,
                 behavior,
                 trainer.datamodule.eval_decode_mask,
                 self.decoding_cv_sweep,
@@ -263,5 +254,5 @@ class EvaluationCallback(pl.Callback):
             psth = trainer.datamodule.psth
             cond_idxs = trainer.datamodule.val_cond_idxs
             jitter = trainer.datamodule.eval_jitter
-            psth_r2 = eval_psth(psth, preds_obs, cond_idxs, jitter)
+            psth_r2 = eval_psth(psth, rates_obs, cond_idxs, jitter)
             pl_module.log("nlb/psth_r2", max(psth_r2, -10.0))

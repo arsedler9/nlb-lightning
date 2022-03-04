@@ -87,13 +87,14 @@ def train(
     )
     # Infer the data dimensionality
     datamodule.setup()
-    n_heldin = datamodule.train_data[0].shape[2]
-    n_heldout = datamodule.train_data[2].shape[2]
+    _, t_obs, input_size = datamodule.train_data[0].shape
+    _, t_total, output_size = datamodule.train_data[1].shape
     # Build the model
     model = SequentialAutoencoder(
-        input_size=n_heldin,
+        input_size=input_size,
         hidden_size=hidden_size,
-        output_size=n_heldin + n_heldout,
+        output_size=output_size,
+        fwd_steps=t_total - t_obs,
         learning_rate=learning_rate,
         weight_decay=weight_decay,
         dropout=dropout,

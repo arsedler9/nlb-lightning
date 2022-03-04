@@ -20,6 +20,7 @@ class SequentialAutoencoder(pl.LightningModule):
         input_size: int,
         hidden_size: int,
         output_size: int,
+        fwd_steps: int,
         learning_rate: float,
         weight_decay: float,
         dropout: float,
@@ -38,6 +39,8 @@ class SequentialAutoencoder(pl.LightningModule):
         output_size : int
             The dimensionality of the output sequence (i.e.
             total number of heldin and heldout neurons)
+        fwd_steps: int
+            The number of time steps to unroll beyond T
         learning_rate : float
             The learning rate to use for optimization
         weight_decay : float
@@ -70,7 +73,7 @@ class SequentialAutoencoder(pl.LightningModule):
         # Instantiate dropout
         self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, observ, fwd_steps):
+    def forward(self, observ, use_logrates=False):
         """The forward pass of the model.
 
         Parameters
@@ -78,8 +81,9 @@ class SequentialAutoencoder(pl.LightningModule):
         observ : torch.Tensor
             A BxTxN tensor of heldin neurons at observed
             time points.
-        fwd_steps : int
-            The number of steps to unroll beyond T
+        use_logrates: bool
+            Whether to output logrates for training
+            or firing rates for analysis.
 
         Returns
         -------
@@ -99,6 +103,7 @@ class SequentialAutoencoder(pl.LightningModule):
         h_n_drop = self.dropout(h_n)
         ic = self.ic_linear(h_n_drop)
         # Create an empty input tensor
+        fwd_steps = self.hparams.fwd_steps
         input_placeholder = torch.zeros((batch_size, obs_steps + fwd_steps, 1))
         input_placeholder = input_placeholder.to(self.device)
         # Unroll the decoder
@@ -106,8 +111,10 @@ class SequentialAutoencoder(pl.LightningModule):
         latents, _ = self.decoder(input_placeholder, torch.unsqueeze(ic_drop, 0))
         # Map decoder state to logrates
         logrates = self.readout(latents)
-
-        return logrates, latents
+        if use_logrates:
+            return logrates, latents
+        else:
+            return torch.exp(logrates), latents
 
     def configure_optimizers(self):
         """Sets up the optimizer.
@@ -142,16 +149,11 @@ class SequentialAutoencoder(pl.LightningModule):
             The scalar loss
         """
 
-        heldin, heldin_forward, heldout, heldout_forward, behavior = batch
+        input_data, recon_data, behavior = batch
         # Pass data through the model
-        fwd_steps = heldin_forward.shape[1]
-        preds, latents = self.forward(heldin, fwd_steps)
-        # Assemble the data
-        heldin_full = torch.cat([heldin, heldin_forward], dim=1)
-        heldout_full = torch.cat([heldout, heldout_forward], dim=1)
-        data = torch.cat([heldin_full, heldout_full], dim=2)
+        preds, latents = self.forward(input_data, use_logrates=True)
         # Compute the Poisson log-likelihood
-        loss = nn.functional.poisson_nll_loss(preds, data)
+        loss = nn.functional.poisson_nll_loss(preds, recon_data)
         self.log("train/loss", loss)
 
         return loss
@@ -178,24 +180,19 @@ class SequentialAutoencoder(pl.LightningModule):
 
         # On test-phase data, compute loss only across heldin neurons
         if len(batch) == 1:
-            (heldin,) = batch
+            (input_data,) = batch
             # Pass data through the model
-            preds, latents = self.forward(heldin, 0)
+            preds, latents = self.forward(input_data, use_logrates=True)
             # Isolate heldin predictions
-            n_heldin = heldin.shape[2]
-            preds = preds[..., :n_heldin]
-            data = heldin
+            _, n_obs, n_heldin = input_data.shape
+            preds = preds[:, :n_obs, :n_heldin]
+            recon_data = input_data
         else:
-            heldin, heldin_forward, heldout, heldout_forward, behavior = batch
+            input_data, recon_data, behavior = batch
             # Pass data through the model
-            fwd_steps = heldin_forward.shape[1]
-            preds, latents = self.forward(heldin, fwd_steps)
-            # Assemble the data
-            heldin_full = torch.cat([heldin, heldin_forward], dim=1)
-            heldout_full = torch.cat([heldout, heldout_forward], dim=1)
-            data = torch.cat([heldin_full, heldout_full], dim=2)
+            preds, latents = self.forward(input_data, use_logrates=True)
         # Compute the Poisson log-likelihood
-        loss = nn.functional.poisson_nll_loss(preds, data)
+        loss = nn.functional.poisson_nll_loss(preds, recon_data)
         self.log("valid/loss", loss)
         self.log("hp_metric", loss)
 

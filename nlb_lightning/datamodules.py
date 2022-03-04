@@ -32,6 +32,32 @@ def to_tensor(array):
     return torch.tensor(array, dtype=torch.float)
 
 
+def assemble_recon_data(heldin, heldin_forward, heldout, heldout_forward):
+    """Combines heldin/heldout and observed/forward data
+    into a single tensor.
+
+    Parameters
+    ----------
+    heldin : torch.Tensor
+        A BxTxN tensor.
+    heldin_forward : torch.Tensor
+        A BxT_FWDxN tensor.
+    heldout : torch.Tensor
+        A BxTxN_OUT tensor.
+    heldout_forward : torch.Tensor
+        A BxT_FWDxN_OUT tensor.
+
+    Returns
+    -------
+    torch.tensor
+        A Bx(T+T_FWD)x(N+N_OUT) tensor.
+    """
+    heldin_full = torch.cat([heldin, heldin_forward], dim=1)
+    heldout_full = torch.cat([heldout, heldout_forward], dim=1)
+    recon_data = torch.cat([heldin_full, heldout_full], dim=2)
+    return recon_data
+
+
 class NLBDataModule(pl.LightningDataModule):
     """Loads from preprocessed HDF5 files created using
     functions in `nlb_tools.make_tensors` and builds PyTorch
@@ -85,20 +111,21 @@ class NLBDataModule(pl.LightningDataModule):
         train_data_path = os.path.join(self.save_path, TRAIN_INPUT_FILE)
         with h5py.File(train_data_path, "r") as h5file:
             # Store the dataset
-            heldin_train = to_tensor(h5file["train_spikes_heldin"][()])
-            self.train_data = (
-                heldin_train,
-                to_tensor(h5file["train_spikes_heldin_forward"][()]),
-                to_tensor(h5file["train_spikes_heldout"][()]),
-                to_tensor(h5file["train_spikes_heldout_forward"][()]),
-                to_tensor(h5file["train_behavior"][()]),
-            )
+            heldin = to_tensor(h5file["train_spikes_heldin"][()])
+            heldin_fwd = to_tensor(h5file["train_spikes_heldin_forward"][()])
+            heldout = to_tensor(h5file["train_spikes_heldout"][()])
+            heldout_fwd = to_tensor(h5file["train_spikes_heldout_forward"][()])
+            behavior = to_tensor(h5file["train_behavior"][()])
+        # Assemble the dataset
+        input_data = heldin
+        recon_data = assemble_recon_data(heldin, heldin_fwd, heldout, heldout_fwd)
+        self.train_data = (input_data, recon_data, behavior)
         self.train_ds = TensorDataset(*self.train_data)
         # Load the evaluation input from file
         eval_data_path = os.path.join(self.save_path, EVAL_INPUT_FILE)
         with h5py.File(eval_data_path, "r") as h5file:
             heldin = to_tensor(h5file["eval_spikes_heldin"][()])
-            self.valid_data = (heldin,)
+        input_data = heldin
         # Check if evaluation target data is available
         target_data_path = os.path.join(self.save_path, EVAL_TARGET_FILE)
         if os.path.isfile(target_data_path):
@@ -110,13 +137,15 @@ class NLBDataModule(pl.LightningDataModule):
                     groupname += f"_{self.hparams.bin_width}"
                 h5group = h5file[groupname]
                 # Store the dataset
-                self.valid_data = (
-                    *self.valid_data,
-                    to_tensor(h5group["eval_spikes_heldin_forward"][()]),
-                    to_tensor(h5group["eval_spikes_heldout"][()]),
-                    to_tensor(h5group["eval_spikes_heldout_forward"][()]),
-                    to_tensor(h5group["eval_behavior"][()]),
+                heldin_fwd = to_tensor(h5group["eval_spikes_heldin_forward"][()])
+                heldout = to_tensor(h5group["eval_spikes_heldout"][()])
+                heldout_fwd = to_tensor(h5group["eval_spikes_heldout_forward"][()])
+                behavior = to_tensor(h5group["eval_behavior"][()])
+                # Assemble the dataset
+                recon_data = assemble_recon_data(
+                    heldin, heldin_fwd, heldout, heldout_fwd
                 )
+                self.valid_data = (input_data, recon_data, behavior)
                 # Store PSTHs and condition labels for evaluation
                 if "psth" in h5group:
                     self.psth = h5group["psth"][()]
@@ -131,10 +160,12 @@ class NLBDataModule(pl.LightningDataModule):
                     self.train_decode_mask = h5group["train_decode_mask"][()]
                     self.eval_decode_mask = h5group["eval_decode_mask"][()]
                 else:
-                    self.train_decode_mask = np.ones(
-                        (heldin_train.shape[0], 1), dtype=bool
-                    )
-                    self.eval_decode_mask = np.ones((heldin.shape[0], 1), dtype=bool)
+                    n_train = self.train_data[0].shape[0]
+                    n_valid = heldin.shape[0]
+                    self.train_decode_mask = np.ones((n_train, 1), dtype=bool)
+                    self.eval_decode_mask = np.ones((n_valid, 1), dtype=bool)
+        else:
+            self.valid_data = (input_data,)
         self.valid_ds = TensorDataset(*self.valid_data)
 
     def train_dataloader(self, shuffle=True):
