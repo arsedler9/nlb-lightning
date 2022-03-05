@@ -16,6 +16,29 @@ from nlb_tools.evaluation import (
 plt.switch_backend("Agg")
 
 
+def get_tensorboard_summary_writer(writers):
+    """Gets the TensorBoard SummaryWriter from a logger
+    or logger collection to allow writing of images.
+
+    Parameters
+    ----------
+    writers : obj or list[obj]
+        An object or list of objects to search for the
+        SummaryWriter.
+
+    Returns
+    -------
+    torch.utils.tensorboard.writer.SummaryWriter
+        The SummaryWriter object.
+    """
+    writer_list = writers if isinstance(writers, list) else [writers]
+    for writer in writer_list:
+        if isinstance(writer, torch.utils.tensorboard.writer.SummaryWriter):
+            return writer
+    else:
+        return None
+
+
 def fig_to_rgb_array(fig):
     """Converts a matplotlib figure into an array
     that can be logged to tensorboard.
@@ -41,7 +64,21 @@ def fig_to_rgb_array(fig):
     return im
 
 
-def model_fwd(model, batch):
+def batch_fwd(model, batch):
+    """Performs the forward pass for a given model and data batch.
+
+    Parameters
+    ----------
+    model : pl.LightningModule
+        The model to pass data through.
+    batch : tuple[torch.Tensor]
+        A tuple of batched input tensors.
+
+    Returns
+    -------
+    tuple[torch.Tensor]
+        A tuple of batched output tensors.
+    """
     input_data, recon_data, *other_input, behavior = batch
     input_data = input_data.to(model.device)
     other_input = [oi.to(model.device) for oi in other_input]
@@ -55,16 +92,21 @@ class RasterPlotCallback(pl.Callback):
     dividing lines.
     """
 
-    def __init__(self, n_samples=2, log_every_n_epochs=20):
+    def __init__(self, batch_fwd=batch_fwd, n_samples=2, log_every_n_epochs=20):
         """Initializes the callback.
 
         Parameters
         ----------
+        batch_fwd: func, optional
+            A function that takes a model and a batch of data and
+            performs the forward pass, returning the model output.
+            May be useful if your model requires specialized I/O.
         n_samples : int, optional
             The number of samples to plot, by default 2
         log_every_n_epochs : int, optional
             The frequency with which to plot and log, by default 20
         """
+        self.batch_fwd = batch_fwd
         self.n_samples = n_samples
         self.log_every_n_epochs = log_every_n_epochs
 
@@ -80,6 +122,10 @@ class RasterPlotCallback(pl.Callback):
         """
         if (trainer.current_epoch % self.log_every_n_epochs) != 0:
             return
+        # Check for the TensorBoard SummaryWriter
+        writer = get_tensorboard_summary_writer(trainer.logger.experiment)
+        if writer is None:
+            return
         # Get data samples
         dataloader = trainer.datamodule.val_dataloader()
         batch = next(iter(dataloader))
@@ -88,7 +134,7 @@ class RasterPlotCallback(pl.Callback):
         _, steps_tot, neur_tot = recon_data.shape
         batch_size, steps_obs, neur_in = input_data.shape
         # Compute model output
-        rates, *_ = model_fwd(pl_module, batch)
+        rates, *_ = self.batch_fwd(pl_module, batch)
         # Convert data to numpy arrays
         recon_data = recon_data.detach().cpu().numpy()
         rates = rates.detach().cpu().numpy()
@@ -106,9 +152,7 @@ class RasterPlotCallback(pl.Callback):
         plt.tight_layout()
         # Log the plot to tensorboard
         im = fig_to_rgb_array(fig)
-        trainer.logger.experiment.add_image(
-            "raster_plot", im, trainer.global_step, dataformats="HWC"
-        )
+        writer.add_image("raster_plot", im, trainer.global_step, dataformats="HWC")
 
 
 class TrajectoryPlotCallback(pl.Callback):
@@ -116,14 +160,19 @@ class TrajectoryPlotCallback(pl.Callback):
     all samples in the validation set and logs to tensorboard.
     """
 
-    def __init__(self, log_every_n_epochs=100):
+    def __init__(self, batch_fwd=batch_fwd, log_every_n_epochs=100):
         """Initializes the callback.
 
         Parameters
         ----------
+        batch_fwd: func, optional
+            A function that takes a model and a batch of data and
+            performs the forward pass, returning the model output.
+            May be useful if your model requires specialized I/O.
         log_every_n_epochs : int, optional
             The frequency with which to plot and log, by default 100
         """
+        self.batch_fwd = batch_fwd
         self.log_every_n_epochs = log_every_n_epochs
 
     def on_validation_epoch_end(self, trainer, pl_module):
@@ -139,11 +188,15 @@ class TrajectoryPlotCallback(pl.Callback):
         # Skip evaluation for most epochs to save time
         if (trainer.current_epoch % self.log_every_n_epochs) != 0:
             return
+        # Check for the TensorBoard SummaryWriter
+        writer = get_tensorboard_summary_writer(trainer.logger.experiment)
+        if writer is None:
+            return
         # Get the validation dataset
         val_dataloader = trainer.datamodule.val_dataloader()
         input_data, recon_data, *_ = trainer.datamodule.valid_data
         # Pass data through the model
-        latents = [model_fwd(pl_module, batch)[1] for batch in val_dataloader]
+        latents = [self.batch_fwd(pl_module, batch)[1] for batch in val_dataloader]
         latents = torch.cat(latents).detach().cpu().numpy()
         # Reduce dimensionality if necessary
         n_samp, n_step, n_lats = latents.shape
@@ -166,9 +219,7 @@ class TrajectoryPlotCallback(pl.Callback):
         plt.tight_layout()
         # Log the plot to tensorboard
         im = fig_to_rgb_array(fig)
-        trainer.logger.experiment.add_image(
-            "trajectory_plot", im, trainer.global_step, dataformats="HWC"
-        )
+        writer.add_image("trajectory_plot", im, trainer.global_step, dataformats="HWC")
 
 
 class EvaluationCallback(pl.Callback):
@@ -177,17 +228,24 @@ class EvaluationCallback(pl.Callback):
     `behavior_r2`, `psth_r2`, and `tp_corr`.
     """
 
-    def __init__(self, log_every_n_epochs=20, decoding_cv_sweep=False):
+    def __init__(
+        self, batch_fwd=batch_fwd, log_every_n_epochs=20, decoding_cv_sweep=False
+    ):
         """Initializes the callback.
 
         Parameters
         ----------
+        batch_fwd: func, optional
+            A function that takes a model and a batch of data and
+            performs the forward pass, returning the model output.
+            May be useful if your model requires specialized I/O.
         log_every_n_epochs : int, optional
             The frequency with which to plot and log, by default 100
         decoding_cv_sweep : bool, optional
             Whether to run a cross-validated hyperparameter sweep to
             find optimal regularization values, by default False
         """
+        self.batch_fwd = batch_fwd
         self.log_every_n_epochs = log_every_n_epochs
         self.decoding_cv_sweep = decoding_cv_sweep
 
@@ -205,13 +263,13 @@ class EvaluationCallback(pl.Callback):
         if (trainer.current_epoch % self.log_every_n_epochs) != 0:
             return
         # Get entire validation dataset from dataloader
-        input_data, recon_data, behavior = trainer.datamodule.valid_data
+        input_data, recon_data, *_, behavior = trainer.datamodule.valid_data
         recon_data = recon_data.detach().cpu().numpy()
         behavior = behavior.detach().cpu().numpy()
         # Get model predictions for the entire validation dataset
         val_dataloader = trainer.datamodule.val_dataloader()
         # Pass the data through the model
-        rates = [model_fwd(pl_module, batch)[0] for batch in val_dataloader]
+        rates = [self.batch_fwd(pl_module, batch)[0] for batch in val_dataloader]
         rates = torch.cat(rates).detach().cpu().numpy()
         # Compute co-smoothing bits per spike
         _, n_obs, n_heldin = input_data.shape
@@ -229,7 +287,9 @@ class EvaluationCallback(pl.Callback):
         train_behavior = train_behavior.detach().cpu().numpy()
         # Get model predictions for the training dataset
         train_dataloader = trainer.datamodule.train_dataloader(shuffle=False)
-        train_rates = [model_fwd(pl_module, batch)[0] for batch in train_dataloader]
+        train_rates = [
+            self.batch_fwd(pl_module, batch)[0] for batch in train_dataloader
+        ]
         train_rates = torch.cat(train_rates).detach().cpu().numpy()
         # Get firing rates for observed time points
         rates_obs = rates[:, :n_obs]
