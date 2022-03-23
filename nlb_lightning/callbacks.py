@@ -1,9 +1,11 @@
 import io
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from scipy.linalg import LinAlgWarning
 from sklearn.decomposition import PCA
 
 from nlb_tools.evaluation import (
@@ -276,12 +278,12 @@ class EvaluationCallback(pl.Callback):
         heldout = recon_data[:, :n_obs, n_heldin:]
         rates_heldout = rates[:, :n_obs, n_heldin:]
         co_bps = bits_per_spike(rates_heldout, heldout)
-        pl_module.log("nlb/co_bps", max(co_bps, -10.0))
+        pl_module.log("nlb/co_bps", max(co_bps, -1.0))
         # Compute forward prediction bits per spike
         forward = recon_data[:, n_obs:]
         rates_forward = rates[:, n_obs:]
         fp_bps = bits_per_spike(rates_forward, forward)
-        pl_module.log("nlb/fp_bps", max(fp_bps, -10.0))
+        pl_module.log("nlb/fp_bps", max(fp_bps, -1.0))
         # Get relevant training dataset from datamodule
         *_, train_behavior = trainer.datamodule.train_data
         train_behavior = train_behavior.detach().cpu().numpy()
@@ -299,20 +301,23 @@ class EvaluationCallback(pl.Callback):
             tp_corr = speed_tp_correlation(heldout, rates_obs, behavior)
             pl_module.log("nlb/tp_corr", tp_corr)
         else:
-            behavior_r2 = velocity_decoding(
-                train_rates_obs,
-                train_behavior,
-                trainer.datamodule.train_decode_mask,
-                rates_obs,
-                behavior,
-                trainer.datamodule.eval_decode_mask,
-                self.decoding_cv_sweep,
-            )
-            pl_module.log("nlb/behavior_r2", max(behavior_r2, -10.0))
+            with warnings.catch_warnings():
+                # Ignore LinAlgWarning from early in training
+                warnings.filterwarnings("ignore", category=LinAlgWarning)
+                behavior_r2 = velocity_decoding(
+                    train_rates_obs,
+                    train_behavior,
+                    trainer.datamodule.train_decode_mask,
+                    rates_obs,
+                    behavior,
+                    trainer.datamodule.eval_decode_mask,
+                    self.decoding_cv_sweep,
+                )
+            pl_module.log("nlb/behavior_r2", max(behavior_r2, -1.0))
         # Compute PSTH reconstruction performance
         if hasattr(trainer.datamodule, "psth"):
             psth = trainer.datamodule.psth
             cond_idxs = trainer.datamodule.val_cond_idxs
             jitter = trainer.datamodule.eval_jitter
             psth_r2 = eval_psth(psth, rates_obs, cond_idxs, jitter)
-            pl_module.log("nlb/psth_r2", max(psth_r2, -10.0))
+            pl_module.log("nlb/psth_r2", max(psth_r2, -1.0))
