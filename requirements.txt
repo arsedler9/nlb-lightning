@@ -2,7 +2,7 @@ numpy
 pandas==1.3.4
 sklearn
 torch
-pytorch-lightning
+pytorch-lightning==1.6.0
 h5py
 matplotlib
 ipykernel

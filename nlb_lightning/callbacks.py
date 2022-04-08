@@ -1,4 +1,3 @@
-import io
 import warnings
 
 import matplotlib.pyplot as plt
@@ -18,14 +17,14 @@ from nlb_tools.evaluation import (
 plt.switch_backend("Agg")
 
 
-def get_tensorboard_summary_writer(writers):
+def get_tensorboard_summary_writer(loggers):
     """Gets the TensorBoard SummaryWriter from a logger
     or logger collection to allow writing of images.
 
     Parameters
     ----------
-    writers : obj or list[obj]
-        An object or list of objects to search for the
+    loggers : obj or list[obj]
+        An object or list of loggers to search for the
         SummaryWriter.
 
     Returns
@@ -33,37 +32,12 @@ def get_tensorboard_summary_writer(writers):
     torch.utils.tensorboard.writer.SummaryWriter
         The SummaryWriter object.
     """
-    writer_list = writers if isinstance(writers, list) else [writers]
-    for writer in writer_list:
-        if isinstance(writer, torch.utils.tensorboard.writer.SummaryWriter):
-            return writer
+    logger_list = loggers if isinstance(loggers, list) else [loggers]
+    for logger in logger_list:
+        if isinstance(logger, pl.loggers.tensorboard.TensorBoardLogger):
+            return logger.experiment
     else:
         return None
-
-
-def fig_to_rgb_array(fig):
-    """Converts a matplotlib figure into an array
-    that can be logged to tensorboard.
-
-    Parameters
-    ----------
-    fig : matplotlib.figure.Figure
-        The figure to be converted.
-
-    Returns
-    -------
-    np.array
-        The figure as an HxWxC array of pixel values.
-    """
-    # Convert the figure to a numpy array
-    with io.BytesIO() as buff:
-        fig.savefig(buff, format="raw")
-        buff.seek(0)
-        fig_data = np.frombuffer(buff.getvalue(), dtype=np.uint8)
-    w, h = fig.canvas.get_width_height()
-    im = fig_data.reshape((int(h), int(w), -1))
-    plt.close()
-    return im
 
 
 def batch_fwd(model, batch):
@@ -125,7 +99,7 @@ class RasterPlotCallback(pl.Callback):
         if (trainer.current_epoch % self.log_every_n_epochs) != 0:
             return
         # Check for the TensorBoard SummaryWriter
-        writer = get_tensorboard_summary_writer(trainer.logger.experiment)
+        writer = get_tensorboard_summary_writer(trainer.loggers)
         if writer is None:
             return
         # Get data samples
@@ -153,8 +127,7 @@ class RasterPlotCallback(pl.Callback):
                 ax.set_ylim(0, neur_tot)
         plt.tight_layout()
         # Log the plot to tensorboard
-        im = fig_to_rgb_array(fig)
-        writer.add_image("raster_plot", im, trainer.global_step, dataformats="HWC")
+        writer.add_figure("raster_plot", fig, trainer.global_step)
 
 
 class TrajectoryPlotCallback(pl.Callback):
@@ -191,7 +164,7 @@ class TrajectoryPlotCallback(pl.Callback):
         if (trainer.current_epoch % self.log_every_n_epochs) != 0:
             return
         # Check for the TensorBoard SummaryWriter
-        writer = get_tensorboard_summary_writer(trainer.logger.experiment)
+        writer = get_tensorboard_summary_writer(trainer.loggers)
         if writer is None:
             return
         # Get the validation dataset
@@ -220,8 +193,7 @@ class TrajectoryPlotCallback(pl.Callback):
         ax.set_title(f"explained variance: {explained_variance:.2f}")
         plt.tight_layout()
         # Log the plot to tensorboard
-        im = fig_to_rgb_array(fig)
-        writer.add_image("trajectory_plot", im, trainer.global_step, dataformats="HWC")
+        writer.add_figure("trajectory_plot", fig, trainer.global_step)
 
 
 class EvaluationCallback(pl.Callback):
