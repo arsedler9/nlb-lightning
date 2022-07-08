@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Sedler"
+  given-names: "Andrew R"
+  orcid: "https://orcid.org/0000-0001-9480-0698"
+title: "PyTorch Lightning utilities for the Neural Latents Benchmark"
+version: 0.1.0
+doi: 10.5281/zenodo.6811600
+date-released: 2022-07-08
+url: "https://github.com/arsedler9/nlb-lightning"
