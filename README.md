@@ -1,5 +1,12 @@
 # PyTorch Lightning - Neural Latents Benchmark
-PyTorch Lightning utilities that make it easier to train and evaluate deep models for the Neural Latents Benchmark. Key components include a preprocessing script, `DataModule`, example `LightningModule`, logging callbacks, and training scripts. The provided callbacks report competition evaluation metrics, inferred firing rate rasters, and latent state trajectories.
+
+[![DOI](https://zenodo.org/badge/459264776.svg)](https://zenodo.org/badge/latestdoi/459264776)
+
+PyTorch Lightning utilities that make it easier to train and evaluate deep models for the Neural Latents Benchmark. Key components include a preprocessing script, `LightningDataModule`, example `LightningModule`, logging callbacks, and training scripts. The provided callbacks report competition evaluation metrics, inferred firing rate rasters, and latent state trajectories.
+
+**If you use or reference `nlb-lightning` in published work, please cite:**
+
+Andrew R. Sedler. (2022). PyTorch Lightning utilities for the Neural Latents Benchmark (v0.1.0). Zenodo. https://doi.org/10.5281/zenodo.6811601
 
 <p float="middle">
   <img src="assets/evaluation_callback.png" width="32%" />
@@ -37,3 +44,6 @@ New models should be implemented as subclasses of the `pytorch_lightning.Lightni
 We provide an example training script for the `SequentialAutoencoder` at `scripts/train_sae.py`. Your script may be different, depending on the hyperparameters of your model and the specific callbacks or other `pytorch_lightning` features that you choose to use. Training logs and checkpoints will be stored in the `RUNS_HOME` directory that you specify in `.env`. Inside `RUNS_HOME`, each run will be stored at `{run_tag}/{data_tag}`, where `data_tag` is resolved using the f-string in the [Preprocessing section](#preprocessing). After training, the output of each model in a `run_tag` directory is written to a shared `submission-{phase}.h5` file, which can be uploaded directly to EvalAI.
 
 For those with the resources to train multiple models in parallel, we provide a second training script (`scripts/train_sae_all.py`) which uses `ray.tune` to train a model on each of the 28 NLB splits and save all rate estimates to the relevant submission file.
+
+# Citation
+If you use this code in published work, please cite 
