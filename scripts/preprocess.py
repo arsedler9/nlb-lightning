@@ -4,6 +4,7 @@ import os
 import dotenv
 
 from nlb_tools.make_tensors import (
+    PARAMS,
     make_eval_input_tensors,
     make_eval_target_tensors,
     make_train_input_tensors,
@@ -87,11 +88,18 @@ def main(
         save_path=os.path.join(save_path, EVAL_INPUT_FILE),
     )
     if phase == "val":
+        # Modify update_params to prepare DMFC target tensors without NaNs
+        update_params = (
+            {"eval_make_params": PARAMS[dataset_name]["make_params"]}
+            if dataset_name == "dmfc_rsg"
+            else None
+        )
         # Create target tensors for evaluation
         make_eval_target_tensors(
             **make_data_args,
             train_trial_split=train_trial_split,
             eval_trial_split=eval_trial_split,
+            update_params=update_params,
             include_psth=True,
             save_path=os.path.join(save_path, EVAL_TARGET_FILE),
         )
