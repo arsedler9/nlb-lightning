@@ -146,24 +146,29 @@ class NLBDataModule(pl.LightningDataModule):
                     heldin, heldin_fwd, heldout, heldout_fwd
                 )
                 self.valid_data = (input_data, recon_data, behavior)
+                # Compute number of training and validation trials
+                n_train = self.train_data[0].shape[0]
+                n_valid = self.valid_data[0].shape[0]
                 # Store PSTHs and condition labels for evaluation
                 if "psth" in h5group:
                     self.psth = h5group["psth"][()]
-                    self.val_cond_idxs = h5group["eval_cond_idx"][()]
+                    self.train_cond_idxs = h5group["train_cond_idx"][()]
+                    self.valid_cond_idxs = h5group["eval_cond_idx"][()]
                     # Store trial jitter if found
                     if "eval_jitter" in h5group:
-                        self.eval_jitter = h5group["eval_jitter"][()]
+                        self.train_jitter = h5group["train_jitter"][()]
+                        self.valid_jitter = h5group["eval_jitter"][()]
                     else:
-                        self.eval_jitter = np.zeros(heldin.shape[0], dtype=int)
+                        self.train_jitter = np.zeros(n_train, dtype=int)
+                        self.valid_jitter = np.zeros(n_valid, dtype=int)
                 # Store decoding masks if found
                 if "eval_decode_mask" in h5group:
                     self.train_decode_mask = h5group["train_decode_mask"][()]
-                    self.eval_decode_mask = h5group["eval_decode_mask"][()]
+                    self.valid_decode_mask = h5group["eval_decode_mask"][()]
                 else:
-                    n_train = self.train_data[0].shape[0]
-                    n_valid = heldin.shape[0]
+                    
                     self.train_decode_mask = np.ones((n_train, 1), dtype=bool)
-                    self.eval_decode_mask = np.ones((n_valid, 1), dtype=bool)
+                    self.valid_decode_mask = np.ones((n_valid, 1), dtype=bool)
         else:
             self.valid_data = (input_data,)
         self.valid_ds = TensorDataset(*self.valid_data)
